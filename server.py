@@ -4,16 +4,42 @@ import json
 import pandas as pd
 import io
 import os
+import httpx
+import asyncio
+from typing import List, Dict, Any
+
+# Constants
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")  # Store API key in environment variable
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 class QuizHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == '/':
             try:
-                # Read and serve the HTML file
                 with open('index.html', 'rb') as f:
                     content = f.read()
                 self.send_response(200)
                 self.send_header('Content-Type', 'text/html')
+                self.end_headers()
+                self.wfile.write(content)
+            except FileNotFoundError:
+                self.send_error(404, "File not found")
+        elif self.path == '/styles.css':
+            try:
+                with open('styles.css', 'rb') as f:
+                    content = f.read()
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/css')
+                self.end_headers()
+                self.wfile.write(content)
+            except FileNotFoundError:
+                self.send_error(404, "File not found")
+        elif self.path == '/script.js':
+            try:
+                with open('script.js', 'rb') as f:
+                    content = f.read()
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/javascript')
                 self.end_headers()
                 self.wfile.write(content)
             except FileNotFoundError:
@@ -24,27 +50,23 @@ class QuizHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path == '/api/quiz/upload':
             try:
-                # Parse the multipart form data
                 content_type = self.headers.get('Content-Type')
                 if not content_type or not content_type.startswith('multipart/form-data'):
                     raise ValueError("Invalid content type")
 
-                # Parse the form data
                 form = cgi.FieldStorage(
                     fp=self.rfile,
                     headers=self.headers,
                     environ={'REQUEST_METHOD': 'POST'}
                 )
 
-                # Get the file
                 file_item = form['file']
                 file_content = file_item.file.read()
                 filename = file_item.filename
 
-                # Process the file
-                results = self.process_file(file_content, filename)
+                # Use asyncio to run the async process_file function
+                results = asyncio.run(self.process_file(file_content, filename))
 
-                # Send response
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.send_header('Access-Control-Allow-Origin', '*')
@@ -54,8 +76,7 @@ class QuizHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_error(400, str(e))
 
-    def process_file(self, file_content, filename):
-        # Read the file
+    async def process_file(self, file_content, filename):
         try:
             if filename.endswith('.csv'):
                 df = pd.read_csv(io.BytesIO(file_content))
@@ -64,13 +85,12 @@ class QuizHandler(BaseHTTPRequestHandler):
             else:
                 raise ValueError("Invalid file format")
 
-            # Validate required columns
             required_columns = {'student_name', 'question', 'student_answer'}
             if not all(col in df.columns for col in required_columns):
                 raise ValueError("Missing required columns")
 
-            # Process the responses using the existing grading logic
-            results = grade_responses(df)
+            # Await the async grade_responses function
+            results = await grade_responses(df)
             insights = generate_insights(results, df)
             
             return insights
@@ -78,52 +98,86 @@ class QuizHandler(BaseHTTPRequestHandler):
         except Exception as e:
             raise ValueError(f"Error processing file: {str(e)}")
 
-def grade_responses(df):
-    # Simplified grading criteria
-    grading_criteria = {
-        "Q1": {
-            "keywords": ["capital", "france", "paris"],
-            "ideal_answer": "The capital of France is Paris."
-        },
-        "Q2": {
-            "keywords": ["largest", "whale", "earth", "mammal"],
-            "ideal_answer": "The largest mammal on earth is the blue whale."
-        }
-    }
+async def grade_single_response(question: str, student_answer: str, client: httpx.AsyncClient) -> Dict[str, Any]:
+    """Grade a single response using the Groq API."""
+    prompt = f"""You are grading a student's answer to the following question:
 
-    results = []
-    for _, row in df.iterrows():
-        question = row['question']
-        response = row['student_answer']
-        criteria = grading_criteria.get(question, {})
+Question: {question}
+Student's Answer: {student_answer}
+
+Please evaluate the answer based on:
+1. Factual correctness
+2. Completeness of response
+3. Understanding of core concepts
+
+Respond with a JSON object containing:
+{{
+    "correct": true/false,
+    "feedback": "brief explanation of grade"
+}}"""
+
+    try:
+        response = await client.post(
+            GROQ_API_URL,
+            headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+            json={
+                "model": "mixtral-8x7b-32768",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.1,
+                "max_tokens": 150
+            }
+        )
         
-        # Check if answer is correct
-        correct = False
-        if criteria:
-            # Check keywords
-            keywords = criteria.get("keywords", [])
-            for keyword in keywords:
-                if keyword.lower() in response.lower():
-                    correct = True
-                    break
+        if response.status_code == 200:
+            result = response.json()
+            grading = json.loads(result['choices'][0]['message']['content'])
+            return grading
+        else:
+            print(f"Error from Groq API: {response.status_code}")
+            return {"correct": False, "feedback": "Error in grading"}
             
-            # Check ideal answer
-            if not correct and criteria.get("ideal_answer"):
-                if criteria["ideal_answer"].lower() in response.lower():
-                    correct = True
+    except Exception as e:
+        print(f"Error grading response: {str(e)}")
+        return {"correct": False, "feedback": "Error in grading"}
 
-        results.append({
-            'question': question,
-            'student': row['student_name'],
-            'correct': correct
-        })
-
+async def grade_responses(df: pd.DataFrame) -> List[Dict[str, Any]]:
+    """Grade all responses using the Groq API."""
+    results = []
+    
+    async with httpx.AsyncClient() as client:
+        # Create a list of tasks for all responses
+        tasks = [
+            grade_single_response(
+                row['question'],
+                row['student_answer'],
+                client
+            )
+            for _, row in df.iterrows()
+        ]
+        
+        # Wait for all grading tasks to complete
+        gradings = await asyncio.gather(*tasks)
+        
+        # Combine results with student information
+        for (_, row), grading in zip(df.iterrows(), gradings):
+            results.append({
+                'question': row['question'],
+                'student': row['student_name'],
+                'correct': grading['correct'],
+                'feedback': grading['feedback']
+            })
+    
     return results
 
-def generate_insights(results, df):
-    # Calculate question performance
+def generate_insights(results: List[Dict[str, Any]], df: pd.DataFrame) -> Dict[str, Any]:
+    """Generate insights from grading results."""
+    # Initialize performance dictionaries
     question_performance = {}
+    student_scores = {}
+    
+    # Calculate performance metrics
     for result in results:
+        # Update question performance
         question = result['question']
         if question not in question_performance:
             question_performance[question] = {'correct': 0, 'total': 0}
@@ -131,14 +185,8 @@ def generate_insights(results, df):
         question_performance[question]['total'] += 1
         if result['correct']:
             question_performance[question]['correct'] += 1
-
-    # Calculate percentages
-    for stats in question_performance.values():
-        stats['percentage'] = (stats['correct'] / stats['total']) * 100
-
-    # Calculate student scores
-    student_scores = {}
-    for result in results:
+        
+        # Update student scores
         student = result['student']
         if student not in student_scores:
             student_scores[student] = {'correct': 0, 'total': 0}
@@ -146,19 +194,26 @@ def generate_insights(results, df):
         student_scores[student]['total'] += 1
         if result['correct']:
             student_scores[student]['correct'] += 1
-
-    # Convert to average scores
+    
+    # Calculate percentages for questions
+    for stats in question_performance.values():
+        stats['percentage'] = (stats['correct'] / stats['total']) * 100
+    
+    # Convert student scores to averages
     average_scores = {
         student: stats['correct'] / stats['total']
         for student, stats in student_scores.items()
     }
-
+    
     return {
         'question_performance': question_performance,
         'average_scores': average_scores
     }
 
 if __name__ == '__main__':
+    if not GROQ_API_KEY:
+        print("Warning: GROQ_API_KEY environment variable not set")
+    
     server = HTTPServer(('localhost', 8000), QuizHandler)
     print("Server started on http://localhost:8000")
     server.serve_forever()
