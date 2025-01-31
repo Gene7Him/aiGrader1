@@ -12,18 +12,6 @@ def read_file(file_path):
     except Exception as e:
         return {"error": str(e)}
 
-# Function to define custom grading criteria (keywords or ideal answers)
-grading_criteria = {
-    "Q1": {
-        "keywords": ["capital", "france", "paris"],
-        "ideal_answer": "The capital of France is Paris."
-    },
-    "Q2": {
-        "keywords": ["largest", "whale", "earth", "mammal"],
-        "ideal_answer": "The largest mammal on earth is the blue whale."
-    }
-}
-
 # Function to evaluate student responses based on grading criteria
 def evaluate_response(question, response, criteria):
     keywords = criteria.get("keywords", [])
@@ -102,19 +90,3 @@ def process_grading(file_path, grading_criteria):
     insights = aggregated_insights(results, df)
 
     return insights
-
-# Sample usage
-if __name__ == "__main__":
-    # Example file path
-    file_path = 'quiz_responses.xlsx'
-
-    # Example structure of the DataFrame: Student Name, Question, Answer (for testing)
-    # student_name,question,student_answer
-
-
-    insights = process_grading(file_path, grading_criteria)
-
-    if isinstance(insights, dict) and "error" in insights:
-        print("Error:", insights["error"])
-    else:
-        print("Aggregated Insights:\n", insights)
