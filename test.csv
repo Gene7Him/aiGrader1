@@ -1,5 +1,10 @@
 student_name,question,student_answer
-John,Q1,The capital of France is Paris
+John,Q1,The capital of France is Chicago
 Jane,Q1,Paris is the capital of France
+Alice,Q1,Paris is the capital city of Seattle
 John,Q2,The blue whale is the largest mammal on earth
 Jane,Q2,Blue whales are the largest animals
+Alice,Q2,The largest mammal on earth is the blue whale
+John,Q3,Water boils at 100 degrees Celsius
+Jane,Q3,The boiling point of water is 100 degrees Celsius
+Alice,Q3,Water boils at 212 degrees
