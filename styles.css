@@ -38,3 +38,60 @@ th {
     text-align: center;
     margin: 20px 0;
 }
+
+#criteriaForm {
+    background-color: #f9f9f9;
+    padding: 20px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    max-width: 500px;
+    margin-bottom: 20px;
+}
+
+#criteriaForm div {
+    margin-bottom: 15px;
+}
+
+#criteriaForm label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+#criteriaForm input[type="text"],
+#criteriaForm input[type="number"] {
+    width: 100%;
+    padding: 8px;
+    box-sizing: border-box;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+#addCriteriaBtn {
+    background-color: #28a745;
+    color: white;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+#addCriteriaBtn:hover {
+    background-color: #218838;
+}
+
+#savedCriteria {
+    background-color: #eef;
+    padding: 15px;
+    border: 1px solid #ccd;
+    border-radius: 5px;
+    max-width: 500px;
+}
+
+#savedCriteria h3 {
+    margin-top: 0;
+}
+
+#criteriaList li {
+    margin-bottom: 5px;
+}

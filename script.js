@@ -3,6 +3,19 @@ const fileInput = document.getElementById('fileInput');
 const errorDiv = document.getElementById('error');
 const loadingDiv = document.getElementById('loading');
 const resultsDiv = document.getElementById('results');
+const criteriaForm = document.getElementById('criteriaForm');
+const addCriteriaBtn = document.getElementById('addCriteriaBtn');
+
+let gradingCriteria = {};
+
+// Load grading criteria from localStorage on page load
+window.addEventListener('DOMContentLoaded', () => {
+    const savedCriteria = localStorage.getItem('gradingCriteria');
+    if (savedCriteria) {
+        gradingCriteria = JSON.parse(savedCriteria);
+        displaySavedCriteria();
+    }
+});
 
 uploadZone.addEventListener('click', () => fileInput.click());
 uploadZone.addEventListener('dragover', (e) => {
@@ -22,6 +35,19 @@ fileInput.addEventListener('change', (e) => {
     handleFile(e.target.files[0]);
 });
 
+// Remove the form's submit event, just listen for the button click
+addCriteriaBtn.addEventListener('click', () => {
+    const formData = new FormData(criteriaForm);
+    const questionId = formData.get('questionId');
+    const keywords = formData.get('keywords').split(',').map(k => k.trim());
+    const points = parseInt(formData.get('points'), 10);
+
+    gradingCriteria[questionId] = { keywords, points };
+    localStorage.setItem('gradingCriteria', JSON.stringify(gradingCriteria));
+    criteriaForm.reset();
+    displaySavedCriteria();
+});
+
 function handleFile(file) {
     if (!file) return;
     
@@ -38,6 +64,7 @@ function handleFile(file) {
 
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('criteria', JSON.stringify(gradingCriteria));
 
     errorDiv.textContent = '';
     loadingDiv.style.display = 'block';
@@ -109,4 +136,24 @@ function displayResults(data) {
 
     html += '</table>';
     resultsDiv.innerHTML = html;
+}
+
+// Function to display saved grading criteria
+function displaySavedCriteria() {
+    const criteriaList = document.getElementById('criteriaList') || createCriteriaList();
+    criteriaList.innerHTML = '';
+
+    for (const [question, details] of Object.entries(gradingCriteria)) {
+        const listItem = document.createElement('li');
+        listItem.textContent = `Question ${question}: Keywords - [${details.keywords.join(', ')}], Points - ${details.points}`;
+        criteriaList.appendChild(listItem);
+    }
+}
+
+function createCriteriaList() {
+    const criteriaSection = document.createElement('div');
+    criteriaSection.id = 'savedCriteria';
+    criteriaSection.innerHTML = '<h3>Saved Grading Criteria:</h3><ul id="criteriaList"></ul>';
+    document.body.insertBefore(criteriaSection, resultsDiv);
+    return document.getElementById('criteriaList');
 }

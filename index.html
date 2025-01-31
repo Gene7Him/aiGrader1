@@ -1,21 +1,49 @@
 <!DOCTYPE html>
 <html>
-<head>
+  <head>
     <title>Quiz Response Analysis</title>
-    <link rel="stylesheet" href="styles.css">
-</head>
-<body>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
     <h1>Quiz Response Analysis</h1>
-    
+
     <div class="upload-zone" id="uploadZone">
-        <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" style="display: none;">
-        <p>Click or drag to upload CSV/Excel file</p>
+      <input
+        type="file"
+        id="fileInput"
+        accept=".csv,.xlsx,.xls"
+        style="display: none"
+      />
+      <p>Click or drag to upload CSV/Excel file</p>
     </div>
-    
+
     <div id="error" class="error"></div>
     <div id="loading" class="loading" style="display: none;">Processing...</div>
     <div id="results" class="results"></div>
 
+    <h2>Custom Grading Criteria</h2>
+    <form id="criteriaForm">
+      <div>
+        <label for="questionId">Question ID:</label>
+        <input type="text" id="questionId" name="questionId" required />
+      </div>
+      <div>
+        <label for="keywords">Keywords (comma separated):</label>
+        <input type="text" id="keywords" name="keywords" required />
+      </div>
+      <div>
+        <label for="points">Points:</label>
+        <input type="number" id="points" name="points" required />
+      </div>
+      <button type="button" id="addCriteriaBtn">Add Criteria</button>
+    </form>
+
+    <!-- Add this section to display saved grading criteria -->
+    <div id="savedCriteria">
+      <h3>Saved Grading Criteria:</h3>
+      <ul id="criteriaList"></ul>
+    </div>
+
     <script src="script.js"></script>
-</body>
+  </body>
 </html>

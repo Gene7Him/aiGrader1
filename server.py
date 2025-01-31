@@ -64,8 +64,12 @@ class QuizHandler(BaseHTTPRequestHandler):
                 file_content = file_item.file.read()
                 filename = file_item.filename
 
+                criteria_item = form['criteria']
+                criteria_content = criteria_item.value
+                grading_criteria = json.loads(criteria_content)
+
                 # Use asyncio to run the async process_file function
-                results = asyncio.run(self.process_file(file_content, filename))
+                results = asyncio.run(self.process_file(file_content, filename, grading_criteria))
 
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
@@ -76,7 +80,7 @@ class QuizHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_error(400, str(e))
 
-    async def process_file(self, file_content, filename):
+    async def process_file(self, file_content, filename, grading_criteria):
         try:
             if filename.endswith('.csv'):
                 df = pd.read_csv(io.BytesIO(file_content))
@@ -90,7 +94,7 @@ class QuizHandler(BaseHTTPRequestHandler):
                 raise ValueError("Missing required columns")
 
             # Await the async grade_responses function
-            results = await grade_responses(df)
+            results = await grade_responses(df, grading_criteria)
             insights = generate_insights(results, df)
             
             return insights
@@ -98,8 +102,11 @@ class QuizHandler(BaseHTTPRequestHandler):
         except Exception as e:
             raise ValueError(f"Error processing file: {str(e)}")
 
-async def grade_single_response(question: str, student_answer: str, client: httpx.AsyncClient) -> Dict[str, Any]:
+async def grade_single_response(question: str, student_answer: str, client: httpx.AsyncClient, criteria: Dict[str, Any]) -> Dict[str, Any]:
     """Grade a single response using the Groq API."""
+    keywords = criteria.get('keywords', [])
+    points = criteria.get('points', 1)
+
     prompt = f"""You are grading a student's answer to the following question:
 
 Question: {question}
@@ -110,10 +117,13 @@ Please evaluate the answer based on:
 2. Completeness of response
 3. Understanding of core concepts
 
+Keywords to look for: {', '.join(keywords)}
+
 Respond with a JSON object containing:
 {{
     "correct": true/false,
-    "feedback": "brief explanation of grade"
+    "feedback": "brief explanation of grade",
+    "points": {points}
 }}"""
 
     try:
@@ -134,13 +144,13 @@ Respond with a JSON object containing:
             return grading
         else:
             print(f"Error from Groq API: {response.status_code}")
-            return {"correct": False, "feedback": "Error in grading"}
+            return {"correct": False, "feedback": "Error in grading", "points": 0}
             
     except Exception as e:
         print(f"Error grading response: {str(e)}")
-        return {"correct": False, "feedback": "Error in grading"}
+        return {"correct": False, "feedback": "Error in grading", "points": 0}
 
-async def grade_responses(df: pd.DataFrame) -> List[Dict[str, Any]]:
+async def grade_responses(df: pd.DataFrame, grading_criteria: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Grade all responses using the Groq API."""
     results = []
     
@@ -150,7 +160,8 @@ async def grade_responses(df: pd.DataFrame) -> List[Dict[str, Any]]:
             grade_single_response(
                 row['question'],
                 row['student_answer'],
-                client
+                client,
+                grading_criteria.get(row['question'], {})
             )
             for _, row in df.iterrows()
         ]
